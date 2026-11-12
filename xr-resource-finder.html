@@ -820,11 +820,13 @@ document.addEventListener('submit', async e => {
     '```json\n' + JSON.stringify(entry, null, 1).replace(/`/g, '\\u0060') + '\n```\n';
   const url = `https://github.com/${REPO}/issues/new?labels=new-entry` +
     `&title=${encodeURIComponent('New entry: ' + entry.name)}&body=${encodeURIComponent(body)}`;
+  // New tab if the browser allows it; popup blockers (common on phones) return null, so fall back to this tab.
+  const go = u => { const w = window.open(u, '_blank'); if (w) w.opener = null; else location.assign(u); };
   // ponytail: GitHub rejects very long URLs; past ~8k chars the body goes via the clipboard instead
-  if (url.length < 8000) return void window.open(url, '_blank', 'noopener');
+  if (url.length < 8000){ toast('Opening GitHub…'); return go(url); }
   try { await navigator.clipboard.writeText(body); } catch(err){ return toast('Too long to send. Shorten the description and try again'); }
-  window.open(`https://github.com/${REPO}/issues/new?labels=new-entry&title=${encodeURIComponent('New entry: ' + entry.name)}`, '_blank', 'noopener');
   toast('Copied. Paste it into the issue description (Ctrl+V)');
+  go(`https://github.com/${REPO}/issues/new?labels=new-entry&title=${encodeURIComponent('New entry: ' + entry.name)}`);
 });
 
 

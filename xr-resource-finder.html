@@ -59,6 +59,7 @@ button{cursor:pointer;background:none;border:none}
 .bar-in .tool{border:1px solid rgba(0,0,0,.25);background:#fff;border-radius:8px;padding:8px 11px;font-size:13px;
   color:#111;display:flex;align-items:center;gap:6px}
 .bar-in .tool:hover{border-color:rgba(0,0,0,.5)}
+.tool svg,.tool .tl{pointer-events:none}
 .bar-in .tool[aria-pressed="true"]{background:#111;color:#fff;border-color:#111}
 
 /* ---------- layout: sidebar + main ---------- */
@@ -273,7 +274,11 @@ details.more>.full{margin-top:10px}
   .logo{height:44px}
   .brand span{display:none}
   .searchwrap{flex-basis:100%;order:3}
-  .tools{margin-left:auto}
+  .bar-in-i{gap:10px}
+  .brand b{font-size:17px}
+  .tools{margin-left:auto;gap:6px}
+  .tools .tl{display:none}
+  .bar-in .tool{width:38px;height:38px;padding:0;justify-content:center}
   .kbd{display:none}
   #q{padding-right:40px}
   .sidebar{padding:10px 14px 2px}
@@ -299,8 +304,8 @@ details.more>.full{margin-top:10px}
       <button id="clearq" title="Clear search" aria-label="Clear search">&times;</button>
     </div>
     <div class="tools">
-      <button class="tool" id="lucky" title="Show me a random one">Surprise me</button>
-      <button class="tool" id="calm" aria-pressed="false" title="Hide pictures, one column, bigger text">Calm mode</button>
+      <button class="tool" id="lucky" title="Show me a random one" aria-label="Surprise me"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.3" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/></svg><span class="tl">Surprise me</span></button>
+      <button class="tool" id="calm" aria-pressed="false" title="Hide pictures, one column, bigger text" aria-label="Calm mode"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><span class="tl">Calm mode</span></button>
       <button class="tool" id="theme" title="Switch light / dark">◐</button>
     </div>
    </div>

@@ -255,7 +255,7 @@ details.more>.full{margin-top:10px}
     </div>
    </div>
   </div>
-  <nav class="chan" id="chan" role="tablist"></nav>
+  <nav class="chan" id="chan"></nav>
   <div class="topics" id="topics"></div>
 </header>
 
@@ -325,7 +325,7 @@ function parseMinutes(t){
 }
 
 /* ============ state ============ */
-let state = { tab:'all', q:'', topics:new Set(), pins:[], run:[], mine:[], recent:[], sel:-1, runNote:'', topicsOpen:!matchMedia('(max-width:640px)').matches };
+let state = { tab:'all', q:'', topics:new Set(), pins:[], run:[], mine:[], recent:[], sel:-1, runNote:'', topicsOpen:!matchMedia('(max-width:640px)').matches, typesOpen:!matchMedia('(max-width:640px)').matches };
 
 async function load(){
   state.pins    = (await store.get('xr.pins'))    || [];
@@ -336,6 +336,7 @@ async function load(){
   const t = await store.get('xr.theme'); if (t) document.documentElement.dataset.theme = t;
   const c = await store.get('xr.calm');  if (c) setCalm(true);
   const to = await store.get('xr.topicsOpen'); if (typeof to === 'boolean') state.topicsOpen = to;
+  const ty = await store.get('xr.typesOpen'); if (typeof ty === 'boolean') state.typesOpen = ty;
   ITEMS = DATA.items.concat(state.mine);
   render();
 }
@@ -380,9 +381,14 @@ function drawTabs(){
     ['mine','New Entry','var(--slate)',state.mine.length],
     ['help','Help &amp; How-to','var(--slate)',null]
   ];
-  document.getElementById('chan').innerHTML = tabs.map(([k,l,c,n]) =>
+  const cur = tabs.find(t => t[0] === state.tab);
+  document.getElementById('chan').innerHTML = `
+    <button class="chip topics-toggle" id="typesToggle" aria-expanded="${state.typesOpen}" aria-controls="typesList" title="Show or hide types">
+      <span aria-hidden="true">☰</span> Types${cur ? ` <span style="opacity:.6">(${cur[1]})</span>` : ''}
+    </button>
+    <div class="topics-list${state.typesOpen ? '' : ' hidden'}" id="typesList" role="tablist">${tabs.map(([k,l,c,n]) =>
     `<button class="ch" role="tab" data-tab="${k}" style="--dot:${c}" aria-selected="${state.tab===k}">
-       ${l}${n!==null?`<span class="n">${n}</span>`:''}</button>`).join('');
+       ${l}${n!==null?`<span class="n">${n}</span>`:''}</button>`).join('')}</div>`;
 }
 
 function drawTopics(){
@@ -670,6 +676,7 @@ document.addEventListener('click', e => {
     state.run  = state.run.filter(id => id !== n.dataset.rmmine);
     save(); render(); return toast('Entry removed'); }
   if ((n = hit('data-tab')))  { state.tab = n.dataset.tab; state.topics.clear(); state.sel = -1; return render(); }
+  if (t.closest('#typesToggle')){ state.typesOpen = !state.typesOpen; store.set('xr.typesOpen', state.typesOpen); return drawTabs(); }
   if (t.closest('#topicsToggle')){ state.topicsOpen = !state.topicsOpen; store.set('xr.topicsOpen', state.topicsOpen); return drawTopics(); }
   if ((n = hit('data-topic'))){ const k = n.dataset.topic;
                                 state.topics.has(k) ? state.topics.delete(k) : state.topics.add(k);

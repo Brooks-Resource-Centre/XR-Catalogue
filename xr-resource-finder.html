@@ -325,7 +325,7 @@ function parseMinutes(t){
 }
 
 /* ============ state ============ */
-let state = { tab:'all', q:'', topics:new Set(), pins:[], run:[], mine:[], recent:[], sel:-1, runNote:'', topicsOpen:true };
+let state = { tab:'all', q:'', topics:new Set(), pins:[], run:[], mine:[], recent:[], sel:-1, runNote:'', topicsOpen:!matchMedia('(max-width:640px)').matches };
 
 async function load(){
   state.pins    = (await store.get('xr.pins'))    || [];
@@ -335,7 +335,7 @@ async function load(){
   state.runNote = (await store.get('xr.runNote')) || '';
   const t = await store.get('xr.theme'); if (t) document.documentElement.dataset.theme = t;
   const c = await store.get('xr.calm');  if (c) setCalm(true);
-  const to = await store.get('xr.topicsOpen'); if (to === false) state.topicsOpen = false;
+  const to = await store.get('xr.topicsOpen'); if (typeof to === 'boolean') state.topicsOpen = to;
   ITEMS = DATA.items.concat(state.mine);
   render();
 }

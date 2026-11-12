@@ -1,0 +1,112 @@
+# Adds a catalogue entry submitted from the site's "New Entry" form.
+# The form opens a GitHub issue holding the entry as a ```json block.
+# A team member with write access adds the "approved" label; this workflow
+# then merges the entry (and any picture dragged into the issue) into
+# xr-catalogue-data.json and xr-resource-finder.html, pushes, and closes the issue.
+name: Add catalogue entry
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: catalogue-write
+  cancel-in-progress: false
+
+jobs:
+  add:
+    if: github.event.label.name == 'approved'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install image resizer
+        run: npm install --no-save --no-audit --no-fund sharp@0.33.5
+
+      - name: Check approver and build entry
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const sharp = require(`${process.cwd()}/node_modules/sharp`);
+            const { owner, repo } = context.repo;
+
+            // Labels can only be added by people with triage access or more; also require write.
+            const who = context.payload.sender.login;
+            const { data: perm } = await github.rest.repos.getCollaboratorPermissionLevel({ owner, repo, username: who });
+            if (!['admin', 'maintain', 'write'].includes(perm.permission))
+              return core.setFailed(`@${who} does not have write access, so cannot approve entries.`);
+
+            const body = context.payload.issue.body || '';
+            const block = body.match(/```json\s*([\s\S]*)```/);
+            if (!block) return core.setFailed('No entry data (```json block) found in the issue.');
+            let e;
+            try { e = JSON.parse(block[1]); } catch (err) { return core.setFailed(`Entry data is not valid JSON: ${err.message}`); }
+            if (!e || typeof e.name !== 'string' || !e.name.trim()) return core.setFailed('Entry has no name.');
+
+            // Keep only the catalogue's own fields, with the types the site expects.
+            const str = v => (typeof v === 'string' ? v.trim() : '');
+            const list = v => (Array.isArray(v) ? v.filter(x => typeof x === 'string' && x.trim()).map(x => x.trim()) : []);
+            const kind = ['cave', 'headset', 'video', 'web'].includes(e.kind) ? e.kind : 'cave';
+            const slug = e.name.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'entry';
+            const entry = {
+              id: slug, name: e.name.trim(), kind, quick: str(e.quick), desc: str(e.desc) || str(e.quick),
+              tags: list(e.tags), topics: list(e.topics).length ? list(e.topics) : ['Other'],
+              by: str(e.by), time: str(e.time), path: str(e.path),
+              obj: list(e.obj), facilitatorNotes: list(e.facilitatorNotes)
+            };
+
+            // First picture dragged into the issue (markdown or <img>), resized to 900px wide JPEG.
+            const pic = body.match(/!\[[^\]]*\]\((https:\/\/[^)\s]+)\)|<img[^>]*\ssrc="(https:\/\/[^"]+)"/);
+            if (pic) {
+              const url = pic[1] || pic[2];
+              try {
+                const res = await fetch(url);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const jpg = await sharp(Buffer.from(await res.arrayBuffer()))
+                  .rotate().resize({ width: 900, withoutEnlargement: true }).jpeg({ quality: 82 }).toBuffer();
+                entry.imgData = `data:image/jpeg;base64,${jpg.toString('base64')}`;
+              } catch (err) {
+                core.warning(`Picture skipped: ${err.message}`);
+              }
+            }
+
+            fs.writeFileSync(`${process.env.RUNNER_TEMP}/entry.json`, JSON.stringify({ entries: [entry] }));
+            core.notice(`Adding "${entry.name}" (${kind})${entry.imgData ? ' with picture' : ''}`);
+
+      - name: Merge into catalogue
+        shell: pwsh
+        run: ./merge-mine-entries.ps1 -InputFile "$env:RUNNER_TEMP/entry.json"
+
+      - name: Commit and push
+        env:
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add xr-catalogue-data.json xr-resource-finder.html
+          git commit -m "Add catalogue entry from #$ISSUE"
+          git push
+
+      - name: Close the issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.issue.number;
+            await github.rest.issues.createComment({ owner, repo, issue_number,
+              body: 'Added to the catalogue. It will show on the site once GitHub Pages finishes publishing (usually 1–2 minutes).' });
+            await github.rest.issues.update({ owner, repo, issue_number, state: 'closed', state_reason: 'completed' });
+
+      - name: Report failure on the issue
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            await github.rest.issues.createComment({ owner, repo, issue_number: context.payload.issue.number,
+              body: `Could not add this entry. See the [workflow run](${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}) for the reason. Fix the issue text, then remove and re-add the \`approved\` label.` });

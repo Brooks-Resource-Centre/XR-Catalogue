@@ -41,6 +41,10 @@
 
 .EXAMPLE
   .\merge-mine-entries.ps1 -InputFile additions.json -DryRun
+
+.EXAMPLE
+  # remove.json: {"remove": ["some-item-id"]}
+  .\merge-mine-entries.ps1 -InputFile remove.json
 #>
 param(
   [Parameter(Mandatory = $true)]
@@ -65,14 +69,31 @@ if (-not (Test-Path $HtmlFile))  { throw "HTML file not found: $HtmlFile" }
 
 # ---------- load input ----------
 $payload = Get-Content $InputFile -Raw -Encoding UTF8 | ConvertFrom-Json
+$data = Get-Content $DataFile -Raw -Encoding UTF8 | ConvertFrom-Json
+
+# Removal mode: {"remove": ["id", ...]} deletes those items instead of adding.
+# ponytail: images referenced via "img" stay in the HTML's IMG block (harmless, just unused bytes)
+$removeIds = @()
+if ($payload -isnot [System.Array] -and $payload.remove) { $removeIds = @($payload.remove) }
+if ($removeIds.Count) {
+  $gone = @($data.items | Where-Object { $removeIds -contains $_.id })
+  $missing = @($removeIds | Where-Object { -not ($gone.id -contains $_) })
+  if ($missing.Count) { throw "Not in the catalogue: $($missing -join ', ')" }
+  Write-Section "Removal summary"
+  $gone | ForEach-Object { Write-Output "  - [$($_.id)] $($_.name) ($($_.kind))" }
+  if ($DryRun) { Write-Output ""; Write-Output "Dry run - no files were changed."; exit 0 }
+  $data.items = @($data.items | Where-Object { $removeIds -notcontains $_.id })
+  $added = @()
+}
+
 $incoming = if ($payload -is [System.Array]) { $payload } else { $payload.entries }
-if (-not $incoming -or $incoming.Count -eq 0) {
+if (-not $removeIds.Count -and (-not $incoming -or $incoming.Count -eq 0)) {
   Write-Output "No entries found in $InputFile - nothing to do."
   exit 0
 }
 
+if (-not $removeIds.Count) {
 # ---------- load catalogue ----------
-$data = Get-Content $DataFile -Raw -Encoding UTF8 | ConvertFrom-Json
 $knownIds = [System.Collections.Generic.HashSet[string]]::new()
 foreach ($it in $data.items) { [void]$knownIds.Add($it.id) }
 
@@ -140,8 +161,10 @@ if ($DryRun) {
   exit 0
 }
 
-# ---------- write catalogue data ----------
 $data.items = @($data.items) + $added
+}
+
+# ---------- write catalogue data ----------
 $json = $data | ConvertTo-Json -Depth 10 -Compress
 [System.IO.File]::WriteAllText($DataFile, $json, (New-Object System.Text.UTF8Encoding($false)))
 
@@ -167,5 +190,6 @@ $htmlCheck = $htmlDataCheck | ConvertFrom-Json
 Write-Output "$HtmlFile : embedded DATA valid JSON, $($htmlCheck.items.Count) items"
 
 Write-Output ""
+if ($removeIds.Count) { Write-Output "Done. $($removeIds.Count) entr$(if ($removeIds.Count -eq 1) {'y'} else {'ies'}) removed."; exit 0 }
 Write-Output "Done. $($added.Count) new entr$(if ($added.Count -eq 1) {'y'} else {'ies'}) merged."
 Write-Output "Open the app and check the new item(s) render correctly before committing."

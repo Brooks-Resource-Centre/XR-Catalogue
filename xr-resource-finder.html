@@ -607,6 +607,17 @@ function openGuide(idx){
    to the catalogue once a team member labels the issue "approved"
    (.github/workflows/add-entry.yml). */
 const REPO = 'Brooks-Resource-Centre/XR-Catalogue';
+// New tab if the browser allows it; popup blockers (common on phones) return null, so fall back to this tab.
+const go = u => { const w = window.open(u, '_blank'); if (w) w.opener = null; else location.assign(u); };
+function requestRemoval(id){
+  const i = byId(id); if (!i) return;
+  const body = `Please remove **${i.name}** from the catalogue.\n\n### Why?\n\n\n---\n` +
+    `<sub>Entry data for the catalogue. Please leave this block as it is.</sub>\n\n` +
+    '```json\n' + JSON.stringify({ remove: i.id, name: i.name }, null, 1).replace(/`/g, '\\u0060') + '\n```\n';
+  toast('Opening GitHub…');
+  go(`https://github.com/${REPO}/issues/new?labels=remove-entry` +
+    `&title=${encodeURIComponent('Remove entry: ' + i.name)}&body=${encodeURIComponent(body)}`);
+}
 
 function drawMine(){
   const s = document.getElementById('status'), v = document.getElementById('view');
@@ -694,7 +705,10 @@ function open(id){
     <div class="sec"><h3>Not the right one?</h3>
       <div style="display:flex;gap:6px;flex-wrap:wrap">${
         (i.topics||[]).filter(t => t !== 'Other').map(t =>
-          `<button class="chip" data-similar="${esc(t)}">More like this in ${esc(t)}</button>`).join('')}</div></div>`;
+          `<button class="chip" data-similar="${esc(t)}">More like this in ${esc(t)}</button>`).join('')}</div></div>
+    ${DATA.items.includes(i) ? `<div class="sec"><h3>Out of date or no longer available?</h3>
+      <button class="btn" data-removereq="${i.id}">Request removal</button>
+      <p class="hint">Opens a GitHub issue. The XR team checks it before the entry is removed.</p></div>` : ''}`;
 
   d.classList.add('on'); document.getElementById('scrim').classList.add('on');
   d.focus();
@@ -759,6 +773,7 @@ document.addEventListener('click', e => {
   if (t.id === 'resetall' || t.id === 'resetall2'){
     state.topics.clear(); state.q = ''; document.getElementById('q').value = ''; return render(); }
   if ((n = hit('data-copy'))) return copy(n.dataset.copy);
+  if ((n = hit('data-removereq'))) return requestRemoval(n.dataset.removereq);
   if ((n = hit('data-run')))  {
     const id = n.dataset.run;
     if (!state.run.includes(id)){ state.run.push(id); n.textContent = 'In run sheet ✓'; toast('Added to run sheet'); }
@@ -820,8 +835,6 @@ document.addEventListener('submit', async e => {
     '```json\n' + JSON.stringify(entry, null, 1).replace(/`/g, '\\u0060') + '\n```\n';
   const url = `https://github.com/${REPO}/issues/new?labels=new-entry` +
     `&title=${encodeURIComponent('New entry: ' + entry.name)}&body=${encodeURIComponent(body)}`;
-  // New tab if the browser allows it; popup blockers (common on phones) return null, so fall back to this tab.
-  const go = u => { const w = window.open(u, '_blank'); if (w) w.opener = null; else location.assign(u); };
   // ponytail: GitHub rejects very long URLs; past ~8k chars the body goes via the clipboard instead
   if (url.length < 8000){ toast('Opening GitHub…'); return go(url); }
   try { await navigator.clipboard.writeText(body); } catch(err){ return toast('Too long to send. Shorten the description and try again'); }

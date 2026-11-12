@@ -3,6 +3,8 @@
 # A team member with write access adds the "approved" label; this workflow
 # then merges the entry (and any picture dragged into the issue) into
 # xr-catalogue-data.json and xr-resource-finder.html, pushes, and closes the issue.
+# Issues from an entry's "Request removal" button hold {"remove": "<id>"} and
+# delete that entry instead.
 name: Add catalogue entry
 
 on:
@@ -46,6 +48,17 @@ jobs:
             if (!block) return core.setFailed('No entry data (```json block) found in the issue.');
             let e;
             try { e = JSON.parse(block[1]); } catch (err) { return core.setFailed(`Entry data is not valid JSON: ${err.message}`); }
+            // Removal request (opened from an entry's "Request removal" button).
+            if (e && typeof e.remove === 'string') {
+              const items = JSON.parse(fs.readFileSync('xr-catalogue-data.json', 'utf8')).items;
+              const hit = items.find(i => i.id === e.remove);
+              if (!hit) return core.setFailed(`No catalogue entry has the id "${e.remove}". It may already be removed.`);
+              fs.writeFileSync(`${process.env.RUNNER_TEMP}/entry.json`, JSON.stringify({ remove: [hit.id] }));
+              core.exportVariable('ACTION_DONE', 'Removed from the catalogue');
+              return core.notice(`Removing "${hit.name}" (${hit.id})`);
+            }
+            core.exportVariable('ACTION_DONE', 'Added to the catalogue');
+
             if (!e || typeof e.name !== 'string' || !e.name.trim()) return core.setFailed('Entry has no name.');
 
             // Keep only the catalogue's own fields, with the types the site expects.
@@ -89,7 +102,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add xr-catalogue-data.json xr-resource-finder.html
-          git commit -m "Add catalogue entry from #$ISSUE"
+          git commit -m "Update catalogue from #$ISSUE: $ACTION_DONE"
           git push
 
       - name: Close the issue
@@ -99,7 +112,7 @@ jobs:
             const { owner, repo } = context.repo;
             const issue_number = context.payload.issue.number;
             await github.rest.issues.createComment({ owner, repo, issue_number,
-              body: 'Added to the catalogue. It will show on the site once GitHub Pages finishes publishing (usually 1–2 minutes).' });
+              body: `${process.env.ACTION_DONE}. The site updates once GitHub Pages finishes publishing (usually 1–2 minutes).` });
             await github.rest.issues.update({ owner, repo, issue_number, state: 'closed', state_reason: 'completed' });
 
       - name: Report failure on the issue
